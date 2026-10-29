@@ -822,4 +822,81 @@ const v4activityPanel=renderMemberActivity;renderMemberActivity=function(m,previ
 })();
 </script>
 
+<script id="groq-voice-widget-addon">
+(()=>{
+  'use strict';
+  const mic=document.getElementById('faAssistantMic');
+  const status=document.getElementById('faAssistantStatus');
+  const panel=document.getElementById('faAssistantPanel');
+  const log=document.getElementById('faAssistantLog');
+  const replay=document.getElementById('faAssistantReplay');
+  if(!mic||!status||!panel||!log||!replay)return;
+
+  let recorder=null,stream=null,chunks=[],recording=false,uploading=false,lastAudio=null,requestController=null;
+  const setStatus=text=>{status.textContent=text};
+  const addBubble=(text,kind='assistant')=>{if(!text)return;const node=document.createElement('div');node.className='fa-assist-bubble'+(kind==='user'?' user':'');node.textContent=String(text);log.appendChild(node);log.scrollTop=log.scrollHeight};
+  const selectedVoice=()=>window.selectedVoice==='male'?'male':'female';
+
+  function releaseStream(){if(stream){stream.getTracks().forEach(track=>track.stop());stream=null}}
+  function resetMic(){recording=false;mic.classList.remove('listening');mic.textContent='🎙';mic.disabled=uploading;mic.setAttribute('aria-label','شروع ضبط صدا')}
+  function cancelRecording(){if(recorder){recorder.__discard=true;if(recorder.state!=='inactive'){try{recorder.stop();return}catch{}}recorder=null}chunks=[];releaseStream();resetMic()}
+  function blobToBase64(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>{const result=String(reader.result||'');resolve(result.slice(result.indexOf(',')+1))};reader.onerror=()=>reject(reader.error||new Error('خواندن فایل صوتی انجام نشد.'));reader.readAsDataURL(blob)})}
+
+  async function startRecording(){
+    if(uploading||recording)return;
+    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){setStatus('ضبط صدا در این مرورگر پشتیبانی نمی‌شود.');return}
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+      const mime=['audio/webm;codecs=opus','audio/webm','audio/mp4'].find(type=>MediaRecorder.isTypeSupported?.(type));
+      recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);chunks=[];recorder.__discard=false;
+      recorder.ondataavailable=event=>{if(event.data?.size)chunks.push(event.data)};
+      recorder.onerror=()=>{releaseStream();resetMic();setStatus('هنگام ضبط صدا خطایی رخ داد. دوباره تلاش کنید.')};
+      recorder.onstop=()=>{
+        const activeRecorder=recorder;const blob=new Blob(chunks,{type:activeRecorder?.mimeType||'audio/webm'});
+        releaseStream();recording=false;mic.classList.remove('listening');mic.textContent='🎙';mic.setAttribute('aria-label','شروع ضبط صدا');
+        if(activeRecorder?.__discard){chunks=[];recorder=null;return}
+        chunks=[];recorder=null;sendAudio(blob);
+      };
+      recorder.start(250);recording=true;mic.classList.add('listening');mic.textContent='■';mic.setAttribute('aria-label','پایان ضبط و ارسال صدا');
+      setStatus('در حال ضبط… برای پایان و ارسال، میکروفون را دوباره بزنید.');
+    }catch(error){releaseStream();resetMic();setStatus(error.name==='NotAllowedError'?'دسترسی میکروفون داده نشد.':'شروع ضبط ممکن نشد؛ اجازهٔ میکروفون را بررسی کنید.')}
+  }
+
+  function decodeMp3(encoded){const raw=String(encoded||'').replace(/^data:audio\/[^;]+;base64,/i,'').replace(/\s/g,'').replace(/-/g,'+').replace(/_/g,'/');const binary=atob(raw);const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);return new Blob([bytes],{type:'audio/mpeg'})}
+  function applyAction(action){if(!action||!action.type||action.type==='NONE')return;
+    if(action.type==='NAVIGATE'&&action.target){const target=String(action.target).trim();const routeAliases={'خانه':'admin','داشبورد':'admin','پنل من':'admin','اطلاع‌رسانی':'news','پیام‌ها':'news','گزارش تصویری':'gallery','تنظیمات':'settings','افزودن عضو':'add','گزارش اعضا':'reports','ورود و خروج':'traffic','حضور و امتیاز':'points','اعضا':'members','home':'admin','dashboard':'admin','messages':'news','announcements':'news','visual-reports':'gallery','visual-reports':'gallery','settings':'settings','add-member':'add','member-reports':'reports','attendance':'points'};let route=routeAliases[target]||target;try{const parsed=new URL(target,location.href);if(parsed.origin===location.origin&&(parsed.hash||parsed.pathname===location.pathname)){const slug=(parsed.hash||'').replace(/^#/,'').split(/[?&]/)[0]||parsed.pathname.split('/').filter(Boolean).pop()||'';route=routeAliases[slug]||slug}}catch{}if(['admin','news','gallery','settings','add','reports','traffic','points','members','message'].includes(route)&&typeof window.navigate_to_page==='function'){window.navigate_to_page(route,{title:action.message_title||action.title||''});return}if(target.startsWith('#')){location.hash=target.slice(1);return}location.assign(target);return}
+    if(action.type==='TOGGLE_THEME'){const choices=[...document.querySelectorAll('.swatch')];if(!choices.length)return;const wanted=String(action.target||'').trim();const match=wanted?choices.find(button=>button.textContent.trim().includes(wanted)):null;if(match)match.click();else{const active=choices.findIndex(button=>button.classList.contains('selected'));choices[(active+1)%choices.length].click()}}
+  }
+  async function playReply(audioBase64,action){
+    if(!audioBase64){setStatus('پاسخ دریافت شد، اما فایل صوتی در خروجی وجود نداشت.');applyAction(action);return}
+    try{
+      const blob=decodeMp3(audioBase64);if(lastAudio)URL.revokeObjectURL(lastAudio);lastAudio=URL.createObjectURL(blob);
+      const audio=new Audio(lastAudio);audio.onended=()=>{setStatus('پاسخ صوتی پخش شد.');applyAction(action)};
+      await audio.play();setStatus('در حال پخش پاسخ صوتی…');
+    }catch(error){setStatus('پاسخ صوتی دریافت شد؛ برای پخش، دکمهٔ بازپخش را بزنید.');applyAction(action)}
+  }
+  async function sendAudio(blob){
+    if(!blob?.size){setStatus('صدای قابل‌ارسالی ضبط نشد.');return}
+    uploading=true;mic.disabled=true;setStatus('در حال ارسال صدا به دستیار…');
+    try{
+      const audioBase64=await blobToBase64(blob);requestController=new AbortController();
+      const response=await fetch('/api/process-voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({audioBase64,mimeType:blob.type||'audio/webm',selectedVoice:selectedVoice()}),signal:requestController.signal});
+      if(!response.ok)throw new Error('HTTP '+response.status);
+      const result=await response.json();
+      if(result.userText)addBubble(result.userText,'user');
+      if(result.replyText)addBubble(result.replyText,'assistant');
+      await playReply(result.audioBase64,result.action);
+    }catch(error){if(error.name!=='AbortError')setStatus('ارسال یا پردازش صدا ناموفق بود؛ اتصال /api/process-voice را بررسی کنید.')}
+    finally{uploading=false;requestController=null;mic.disabled=false}
+  }
+
+  mic.onclick=()=>{if(recording){try{recorder?.stop()}catch{}return}startRecording()};
+  replay.onclick=async()=>{if(!lastAudio){setStatus('هنوز پاسخ صوتی برای بازپخش وجود ندارد.');return}try{const audio=new Audio(lastAudio);await audio.play();setStatus('در حال پخش پاسخ صوتی…')}catch{setStatus('پخش صدا در مرورگر ممکن نشد.')}};
+  panel.querySelector('.fa-assist-close')?.addEventListener('click',cancelRecording);
+  document.getElementById('faAssistantLauncher')?.addEventListener('click',()=>{setTimeout(()=>{if(panel.hidden)cancelRecording()},0)});
+  const oldSignOut=window.signOut;if(typeof oldSignOut==='function')window.signOut=function(){cancelRecording();requestController?.abort();if(lastAudio){URL.revokeObjectURL(lastAudio);lastAudio=null}return oldSignOut.apply(this,arguments)};
+  window.addEventListener('pagehide',cancelRecording);
+})();
+</script>
+
 </body></html>
