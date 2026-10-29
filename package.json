@@ -1,13 +1,13 @@
 {
-  "name": "gemini-voice-assistant",
+  "name": "voice-assistant-agent",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "start": "node server.mjs"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "groq-sdk": "^0.7.0",
+    "node-edge-tts": "^1.1.2"
   }
 }
