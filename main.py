@@ -13,7 +13,6 @@ app = FastAPI()
 class VoiceRequest(BaseModel):
     audioBase64: str
 
-# متصل کردن پوشه public برای خواندن فایل‌های HTML
 app.mount("/public", StaticFiles(directory="public"), name="public")
 
 @app.get("/")
@@ -24,9 +23,9 @@ async def read_index():
 async def process_voice(req: VoiceRequest):
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="کلید GROQ_API_KEY در تنظیمات Render ست نشده است.")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY در تنظیمات Render ست نشده است.")
 
-    # ۱. استخراج صحیح داده‌های Base64 صوتی
+    # ۱. استخراج رشته Base64 بدون پیشوند (اصلاح‌شده)
     audio_data = req.audioBase64
     if "," in audio_data:
         audio_data = audio_data.split(",")[1]
@@ -34,23 +33,23 @@ async def process_voice(req: VoiceRequest):
     try:
         audio_bytes = base64.b64decode(audio_data)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"فرمت فایل صوتی ناخوانا است: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"فرمت Base64 ناخوانا است: {str(e)}")
 
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="فایل صوتی خالی است.")
 
     client = Groq(api_key=api_key)
 
-    # ۲. تبدیل گفتار صوتی به متن با Whisper (پردازش مستقیم در حافظه)
+    # ۲. تبدیل گفتار به متن با Whisper
     try:
         transcription = client.audio.transcriptions.create(
-            file=("speech.webm", audio_bytes),
+            file=("speech.webm", audio_bytes, "audio/webm"),
             model="whisper-large-v3",
             language="fa"
         )
         user_text = transcription.text.strip() if transcription.text else ""
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"خطای پردازش صوت: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"خطای Groq Whisper: {str(e)}")
 
     if not user_text:
         return {
@@ -61,7 +60,7 @@ async def process_voice(req: VoiceRequest):
         }
 
     # ۳. تحلیل قصد کاربر با Llama 3.3
-    system_prompt = """You are a smart web app assistant. Respond strictly in valid JSON format.
+    system_prompt = """You are a smart web app assistant. Respond strictly in valid JSON format:
 {
   "replyText": "پاسخ کوتاه و صمیمی به فارسی",
   "action": {
@@ -97,7 +96,6 @@ Return JSON strictly."""
     except Exception as e:
         print("TTS Error:", e)
 
-    # ۵. بازگرداندن پاسخ و اکشن برای فرانت‌اند
     return {
         "userText": user_text,
         "replyText": agent_res.get("replyText", "انجام شد"),
