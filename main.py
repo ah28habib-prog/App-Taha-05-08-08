@@ -26,7 +26,7 @@ async def process_voice(req: VoiceRequest):
     if not api_key:
         raise HTTPException(status_code=500, detail="کلید GROQ_API_KEY در تنظیمات Render ست نشده است.")
 
-    # ۱. استخراج استاندارد داده‌های Base64 صوتی
+   # ۱. استخراج استاندارد داده‌های Base64 صوتی
     audio_data = req.audioBase64
     if "," in audio_data:
         audio_data = audio_data.split(",")[1]
