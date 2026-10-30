@@ -754,14 +754,14 @@ const v4activityPanel=renderMemberActivity;renderMemberActivity=function(m,previ
 <section id="faAssistantPanel" dir="rtl" aria-label="دستیار صوتی فارسی" hidden>
   <header class="fa-assist-head"><span class="fa-assist-mark">✦</span><div class="fa-assist-title"><strong>دستیار صوتی همراه سازمان</strong><small id="faAssistantVoiceLabel">پاسخ‌گو به فارسی</small></div><button class="fa-assist-close" type="button" aria-label="بستن">×</button></header>
   <div class="fa-assist-log" id="faAssistantLog" aria-live="polite"><div class="fa-assist-bubble">سلام. می‌توانم بخش‌های اپ را باز کنم، پیام‌ها را پیدا کنم و اطلاعات حساب شما را بگویم. روی میکروفون بزنید یا درخواستتان را بنویسید.</div></div>
-  <div class="fa-assist-status" id="faAssistantStatus" role="status">برای شروع، دکمهٔ میکروفون را بزنید.</div>
-  <form class="fa-assist-controls" id="faAssistantForm"><button class="fa-assist-mic" id="faAssistantMic" type="button" aria-label="شروع گفتار">🎙</button><input class="fa-assist-input" id="faAssistantInput" autocomplete="off" placeholder="مثلاً: پیام اردوی جمعه را نشان بده"><button class="fa-assist-send" type="submit">ارسال</button></form>
+  <div class="fa-assist-status" id="agentStatus" role="status">برای شروع، دکمهٔ میکروفون را بزنید.</div>
+  <form class="fa-assist-controls" id="faAssistantForm"><button class="fa-assist-mic" id="micBtn" type="button" onclick="toggleRecording()" aria-label="شروع گفتار">🎙</button><input class="fa-assist-input" id="faAssistantInput" autocomplete="off" placeholder="مثلاً: پیام اردوی جمعه را نشان بده"><button class="fa-assist-send" type="submit">ارسال</button></form>
   <button class="fa-assist-replay" id="faAssistantReplay" type="button">🔊 پخش دوبارهٔ پاسخ</button>
 </section>
 <script id="fa-persian-voice-assistant">
 (()=>{
  'use strict';
- const launcher=document.getElementById('faAssistantLauncher'),panel=document.getElementById('faAssistantPanel'),log=document.getElementById('faAssistantLog'),status=document.getElementById('faAssistantStatus'),mic=document.getElementById('faAssistantMic'),input=document.getElementById('faAssistantInput'),voiceLabel=document.getElementById('faAssistantVoiceLabel');
+ const launcher=document.getElementById('faAssistantLauncher'),panel=document.getElementById('faAssistantPanel'),log=document.getElementById('faAssistantLog'),status=document.getElementById('agentStatus')||document.getElementById('faAssistantStatus'),mic=document.getElementById('micBtn')||document.getElementById('faAssistantMic'),input=document.getElementById('faAssistantInput'),voiceLabel=document.getElementById('faAssistantVoiceLabel');
  if(!launcher||!panel)return;
  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
  let listening=false,lastReply='',selectedVoice='female',realtimeSocket=null,realtimeReady=false,isCapturing=false,isConnecting=false,micStream=null,captureContext=null,playbackContext=null,micSource=null,pcmProcessor=null,silentGain=null,outputClock=0,transcriptBubble=null;
@@ -825,8 +825,8 @@ const v4activityPanel=renderMemberActivity;renderMemberActivity=function(m,previ
 <script id="groq-voice-widget-addon">
 (()=>{
   'use strict';
-  const mic=document.getElementById('faAssistantMic');
-  const status=document.getElementById('faAssistantStatus');
+  const mic=document.getElementById('micBtn')||document.getElementById('faAssistantMic');
+  const status=document.getElementById('agentStatus')||document.getElementById('faAssistantStatus');
   const panel=document.getElementById('faAssistantPanel');
   const log=document.getElementById('faAssistantLog');
   const replay=document.getElementById('faAssistantReplay');
@@ -871,8 +871,8 @@ const v4activityPanel=renderMemberActivity;renderMemberActivity=function(m,previ
     if(!audioBase64){setStatus('پاسخ دریافت شد، اما فایل صوتی در خروجی وجود نداشت.');applyAction(action);return}
     try{
       const blob=decodeMp3(audioBase64);if(lastAudio)URL.revokeObjectURL(lastAudio);lastAudio=URL.createObjectURL(blob);
-      const audio=new Audio(lastAudio);audio.onended=()=>{setStatus('پاسخ صوتی پخش شد.');applyAction(action)};
-      await audio.play();setStatus('در حال پخش پاسخ صوتی…');
+      const audio=new Audio(lastAudio);audio.onended=()=>setStatus('پاسخ صوتی پخش شد.');
+      await audio.play();setStatus('در حال پخش پاسخ صوتی…');applyAction(action);
     }catch(error){setStatus('پاسخ صوتی دریافت شد؛ برای پخش، دکمهٔ بازپخش را بزنید.');applyAction(action)}
   }
   async function sendAudio(blob){
@@ -890,7 +890,8 @@ const v4activityPanel=renderMemberActivity;renderMemberActivity=function(m,previ
     finally{uploading=false;requestController=null;mic.disabled=false}
   }
 
-  mic.onclick=()=>{if(recording){try{recorder?.stop()}catch{}return}startRecording()};
+  window.toggleRecording=()=>{if(recording){try{recorder?.stop()}catch{}return}startRecording()};
+  mic.onclick=window.toggleRecording;
   replay.onclick=async()=>{if(!lastAudio){setStatus('هنوز پاسخ صوتی برای بازپخش وجود ندارد.');return}try{const audio=new Audio(lastAudio);await audio.play();setStatus('در حال پخش پاسخ صوتی…')}catch{setStatus('پخش صدا در مرورگر ممکن نشد.')}};
   panel.querySelector('.fa-assist-close')?.addEventListener('click',cancelRecording);
   document.getElementById('faAssistantLauncher')?.addEventListener('click',()=>{setTimeout(()=>{if(panel.hidden)cancelRecording()},0)});
