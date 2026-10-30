@@ -13,7 +13,7 @@ app = FastAPI()
 class VoiceRequest(BaseModel):
     audioBase64: str
 
-# متصل کردن پوشه static/public برای خواندن فایل‌های HTML
+# متصل کردن پوشه public برای خواندن فایل‌های HTML
 app.mount("/public", StaticFiles(directory="public"), name="public")
 
 @app.get("/")
@@ -26,15 +26,15 @@ async def process_voice(req: VoiceRequest):
     if not api_key:
         raise HTTPException(status_code=500, detail="کلید GROQ_API_KEY در تنظیمات Render ست نشده است.")
 
-   # ۱. استخراج استاندارد داده‌های Base64 صوتی
+    # ۱. استخراج صحیح داده‌های Base64 صوتی
     audio_data = req.audioBase64
     if "," in audio_data:
         audio_data = audio_data.split(",")[1]
 
     try:
         audio_bytes = base64.b64decode(audio_data)
-    except Exception:
-        raise HTTPException(status_code=400, detail="فرمت فایل صوتی ناخوانا است.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"فرمت فایل صوتی ناخوانا است: {str(e)}")
 
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="فایل صوتی خالی است.")
@@ -80,7 +80,7 @@ Return JSON strictly."""
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
-        agent_res = json.loads(chat_completion.choices[0].message.content)
+        agent_res = json.loads(chat_completion.choices.message.content)
     except Exception:
         agent_res = {"replyText": "درخواست شما دریافت شد.", "action": {"type": "NONE", "target": ""}}
 
